@@ -86,7 +86,12 @@ class Offline1DBinPackingEnv:
             "bins_used": len(self.bins),
             "utilization":self._calculate_utilization()
         } 
-        return self._get_state(), reward, self.done, info   
+        return self._get_state(), reward, self.done, info 
+
+    def _calculate_utilization(self):
+        total_capacity = len(self.bins) * self.bin_capacity
+        total_used = sum(sum(bin) for bin in self.bins)
+        return total_used / total_capacity if total_capacity > 0 else 0.0  
         
     
 
