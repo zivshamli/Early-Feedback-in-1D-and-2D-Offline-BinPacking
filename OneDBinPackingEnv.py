@@ -84,6 +84,7 @@ class Offline1DBinPackingEnv:
             self.done = True
         info={
             "bins_used": len(self.bins),
+            "order bins": self.bins,
             "utilization":self._calculate_utilization()
         } 
         return self._get_state(), reward, self.done, info 
