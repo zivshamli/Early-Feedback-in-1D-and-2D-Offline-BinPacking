@@ -7,7 +7,8 @@ class Offline1DBinPackingEnv:
         self.reset()
 
     def reset(self):
-        self.bins = []   
+        self.bins = [] 
+        self.map_index_item_in_bins = []  
         self.remaining_items = self.items.copy()
         self.done = False
         return self._get_state()
@@ -43,7 +44,7 @@ class Offline1DBinPackingEnv:
 
         return valid_actions 
 
-    def step(self, action):
+    def step(self, action, global_item_index=0):
 
         """
         Takes an action (item_index, bin_index) and updates the environment state.
@@ -69,11 +70,13 @@ class Offline1DBinPackingEnv:
                     "invalid_action": True
                 }
             self.bins[bin_index].append(item)
+            self.map_index_item_in_bins[bin_index].append(global_item_index)
         else:
             # Place item in a new bin
             if item > self.bin_capacity:
                 raise ValueError("Item does not fit in a new bin.")
             self.bins.append([item])
+            self.map_index_item_in_bins.append([global_item_index])
             reward = -1  # Negative reward for opening a new bin
 
 
@@ -85,6 +88,7 @@ class Offline1DBinPackingEnv:
         info={
             "bins_used": len(self.bins),
             "order bins": self.bins,
+            "item_indices_in_bins": self.map_index_item_in_bins,
             "utilization":self._calculate_utilization()
         } 
         return self._get_state(), reward, self.done, info 
