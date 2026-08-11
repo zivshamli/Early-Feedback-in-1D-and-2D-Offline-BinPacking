@@ -9,6 +9,7 @@ from ORLibLoader import ORLib1DBinPackingLoader
 from OneDBinPackingEnv import Offline1DBinPackingEnv
 from MCAgent import MonteCarloActorCritic
 from TDEarlyFeedBackAgent import TDEarlyFeedbackActorCritic
+from TDAgent import TDActorCritic
 
 
 
@@ -260,7 +261,7 @@ def train(
     return history, validation_history
 
 
-def td_train(agent,
+def td_ef_train(agent,
         train_instances,
         validation_instances,
         episodes,
@@ -405,7 +406,162 @@ def td_train(agent,
 
     return history, validation_history
 
+def td_train(
+    agent,
+    train_instances,
+    validation_instances,
+    episodes,
+    validation_interval=200
+):
 
+    history = []
+
+    validation_history = []
+
+    for episode in range(episodes):
+
+        # =================================
+        # Select random training instance
+        # =================================
+
+        instance = random.choice(train_instances)
+
+        env = Offline1DBinPackingEnv(
+            instance.items,
+            instance.capacity
+        )
+
+        # =================================
+        # Generate episode
+        # =================================
+
+        trajectory, episode_reward = agent.generate_episode(
+            env,
+            episode
+        )
+
+        # =================================
+        # TD(0) update
+        # =================================
+
+        (
+            actor_loss,
+            critic_loss,
+            gradient_variance,
+            gradient_norm
+        ) = agent.update(
+            trajectory
+        )
+
+        # =================================
+        # Episode metrics
+        # =================================
+
+        bins = len(env.bins)
+
+        utilization = env._calculate_utilization()
+
+        # =================================
+        # Save history
+        # =================================
+
+        history.append({
+
+            "episode": episode,
+
+            "reward": episode_reward,
+
+            "bins": bins,
+
+            "optimal_bins": instance.optimal_bins,
+
+            "utilization": utilization,
+
+            "actor_loss": actor_loss,
+
+            "critic_loss": critic_loss,
+
+            "gradient_variance": gradient_variance,
+
+            "gradient_norm": gradient_norm
+
+        })
+
+        # =================================
+        # Free memory
+        # =================================
+
+        trajectory.clear()
+
+        del trajectory
+        del env
+
+        gc.collect()
+
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
+        # =================================
+        # Validation
+        # =================================
+
+        if (
+            episode % validation_interval == 0
+            and episode != 0
+        ):
+
+            print("\nRunning Validation...")
+
+            val = validate(
+                agent,
+                validation_instances
+            )
+
+            validation_history.append({
+
+                "episode": episode,
+
+                "utilization": val["utilization"],
+
+                "optimality_gap": val["optimality_gap"]
+
+            })
+
+            print(
+                "Validation Episode:",
+                episode
+            )
+
+            print(
+                "Validation Utilization:",
+                val["utilization"]
+            )
+
+            print(
+                "Validation Optimality Gap:",
+                val["optimality_gap"]
+            )
+
+        # =================================
+        # Training log
+        # =================================
+
+        print(
+            "Episode:",
+            episode,
+            "Instance:",
+            instance.name,
+            "Reward:",
+            episode_reward,
+            "Bins:",
+            bins,
+            "OPT:",
+            instance.optimal_bins,
+            "Util:",
+            utilization
+        )
+
+    return history, validation_history
 
 
 # ==================================================
@@ -494,6 +650,7 @@ for seed in seeds:
 
     )
     '''
+    '''
     agent = TDEarlyFeedbackActorCritic(
         actor_state_dim=state_dim,
 
@@ -505,6 +662,22 @@ for seed in seeds:
         agent_type="TD_EF"
         print("Agent is TDEarlyFeedbackActorCritic")
 
+    train_history, validation_history = td_ef_train(
+        agent,
+        train_instances,
+        validation_instances,
+        episodes=5000,
+        validation_interval=200
+    )
+    '''
+    
+    agent = TDActorCritic(
+        actor_state_dim=state_dim,
+        critic_state_dim=state_dim
+    )
+    if agent.__class__.__name__ == "TDActorCritic":
+        agent_type="TD"
+        print("Agent is TDActorCritic")
     train_history, validation_history = td_train(
         agent,
         train_instances,
@@ -512,7 +685,7 @@ for seed in seeds:
         episodes=5000,
         validation_interval=200
     )
-    
+
 
 
     test_results = evaluate(
