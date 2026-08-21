@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 
 MODEL_FILES = {
     "MC": "MCResult/MC_test_results_seed_*.csv",
+    "TD WITHOUT EF": "TDResult/TD_test_results_seed_*.csv",
     "TD_EF": "TDWithEF/TD_EF_test_results_seed_*.csv",
 }
 

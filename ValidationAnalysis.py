@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 
 MODEL_FILES = {
     "MC": "MCResult/MC_validation_history_seed_*.csv",
-    "TD": "TDResult/TD_validation_history_seed_*.csv",
+    "TD WITHOUT EF": "TDResult/TD_validation_history_seed_*.csv",
     "TD_EF": "TDWithEF/TD_EF_validation_history_seed_*.csv",
 }
 
