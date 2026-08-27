@@ -17,6 +17,10 @@ MODEL_FILES = {
 
 WINDOW_SIZE = 200
 
+# Only for Utilization and Optimality Gap smoothing
+ROLLING_WINDOW = 100
+MAX_EPISODE = 5000
+
 OUTPUT_DIR = "train_analysis"
 
 os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -47,10 +51,6 @@ for model, pattern in MODEL_FILES.items():
 
         # ----------------------------------------------------
         # Extract seed from filename
-        #
-        # Example:
-        # MC_train_history_seed_1.csv
-        # TD_EF_train_history_seed_1.csv
         # ----------------------------------------------------
 
         seed = filename.split("seed_")[1].split(".csv")[0]
@@ -315,7 +315,215 @@ model_statistics.to_csv(
 
 
 # ============================================================
+# ============================================================
+# TRAINING PERFORMANCE
+# UTILIZATION + OPTIMALITY GAP
+# ONLY THESE TWO USE ROLLING SMOOTHING
+# ============================================================
+# ============================================================
+
+performance_data = data[
+    data["episode"] <= MAX_EPISODE
+].copy()
+
+performance_data = (
+    performance_data
+    .sort_values(
+        ["model", "seed", "episode"]
+    )
+    .reset_index(drop=True)
+)
+
+
+# ============================================================
+# ROLLING MEAN PER SEED
+# ============================================================
+
+performance_data["utilization_smooth"] = (
+    performance_data
+    .groupby(
+        ["model", "seed"]
+    )["utilization"]
+    .transform(
+        lambda x: x.rolling(
+            ROLLING_WINDOW,
+            min_periods=1
+        ).mean()
+    )
+)
+
+
+performance_data["optimality_gap_smooth"] = (
+    performance_data
+    .groupby(
+        ["model", "seed"]
+    )["optimality_gap"]
+    .transform(
+        lambda x: x.rolling(
+            ROLLING_WINDOW,
+            min_periods=1
+        ).mean()
+    )
+)
+
+
+# ============================================================
+# MEAN ± STD ACROSS SEEDS
+# ============================================================
+
+performance_across_seeds = (
+    performance_data
+    .groupby(
+        [
+            "model",
+            "episode"
+        ]
+    )
+    .agg(
+
+        utilization_mean=(
+            "utilization_smooth",
+            "mean"
+        ),
+
+        utilization_std=(
+            "utilization_smooth",
+            "std"
+        ),
+
+        optimality_gap_mean=(
+            "optimality_gap_smooth",
+            "mean"
+        ),
+
+        optimality_gap_std=(
+            "optimality_gap_smooth",
+            "std"
+        ),
+    )
+    .reset_index()
+)
+
+
+# ============================================================
+# SAVE PERFORMANCE DATA
+# ============================================================
+
+performance_across_seeds.to_csv(
+    os.path.join(
+        OUTPUT_DIR,
+        "training_performance_rolling_100.csv"
+    ),
+    index=False
+)
+
+
+# ============================================================
+# PERFORMANCE PLOT FUNCTION
+# ============================================================
+
+def plot_training_performance(
+    df,
+    mean_column,
+    std_column,
+    ylabel,
+    title,
+    filename
+):
+
+    plt.figure(figsize=(11, 6))
+
+    for model in df["model"].unique():
+
+        model_df = (
+            df[
+                df["model"] == model
+            ]
+            .sort_values("episode")
+        )
+
+        x = model_df["episode"]
+
+        y = model_df[mean_column]
+
+        std = (
+            model_df[std_column]
+            .fillna(0)
+        )
+
+        plt.plot(
+            x,
+            y,
+            label=model
+        )
+
+        plt.fill_between(
+            x,
+            y - std,
+            y + std,
+            alpha=0.15
+        )
+
+    plt.xlabel("Episode")
+    plt.ylabel(ylabel)
+
+    plt.title(title)
+
+    # Force the graph to show up to Episode 5000
+    plt.xlim(
+        0,
+        MAX_EPISODE
+    )
+
+    plt.legend()
+    plt.grid(True)
+
+    plt.tight_layout()
+
+    plt.savefig(
+        os.path.join(
+            OUTPUT_DIR,
+            filename
+        ),
+        dpi=300
+    )
+
+    plt.show()
+
+
+# ============================================================
+# UTILIZATION — ROLLING 100
+# ============================================================
+
+plot_training_performance(
+    performance_across_seeds,
+    "utilization_mean",
+    "utilization_std",
+    "Mean Utilization",
+    "Training Utilization — Mean ± STD Across Seeds with Rolling Window (100 Episodes)",
+    "utilization_comparison.png"
+)
+
+
+# ============================================================
+# OPTIMALITY GAP — ROLLING 100
+# ============================================================
+
+plot_training_performance(
+    performance_across_seeds,
+    "optimality_gap_mean",
+    "optimality_gap_std",
+    "Mean Optimality Gap",
+    "Training Optimality Gap — Mean ± STD Across Seeds with Rolling Window (100 Episodes)",
+    "optimality_gap_comparison.png"
+)
+
+
+# ============================================================
+# ============================================================
 # WINDOW ANALYSIS
+# EVERYTHING BELOW REMAINS AS IN YOUR ORIGINAL CODE
+# ============================================================
 # ============================================================
 
 data["window"] = (
@@ -549,24 +757,11 @@ def plot_metric(
 # LEARNING CURVES
 # ============================================================
 
-plot_metric(
-    window_across_seeds,
-    "utilization_mean",
-    "utilization_std_across_seeds",
-    "Mean Utilization",
-    "Training Utilization — Mean ± STD Across Seeds",
-    "utilization_comparison.png"
-)
-
-
-plot_metric(
-    window_across_seeds,
-    "optimality_gap_mean",
-    "optimality_gap_std_across_seeds",
-    "Mean Optimality Gap",
-    "Training Optimality Gap — Mean ± STD Across Seeds",
-    "optimality_gap_comparison.png"
-)
+# NOTE:
+# Utilization and Optimality Gap are NOT plotted here anymore.
+# They are plotted above using Rolling Mean.
+#
+# The four plots below remain unchanged.
 
 
 plot_metric(
