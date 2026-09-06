@@ -21,6 +21,17 @@ WINDOW_SIZE = 200
 ROLLING_WINDOW = 100
 MAX_EPISODE = 5000
 
+# ============================================================
+# CONVERGENCE CONFIGURATION
+# ============================================================
+
+# Percentage of the best rolling utilization used as threshold
+CONVERGENCE_THRESHOLD = 0.95
+
+# Number of consecutive episodes that must remain above
+# the threshold to consider the model converged
+CONVERGENCE_PATIENCE = 100
+
 OUTPUT_DIR = "train_analysis"
 
 os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -419,6 +430,315 @@ performance_across_seeds.to_csv(
 
 
 # ============================================================
+# ============================================================
+# CONVERGENCE SPEED + AUC
+# ============================================================
+# ============================================================
+
+def calculate_auc(episodes, utilization):
+    """
+    Calculate normalized AUC using the trapezoidal rule.
+
+    The result represents the average utilization
+    over the training process.
+    """
+
+    episodes = np.asarray(episodes)
+    utilization = np.asarray(utilization)
+
+    if len(episodes) < 2:
+        return np.nan
+
+    episode_range = (
+        episodes[-1] - episodes[0]
+    )
+
+    if episode_range <= 0:
+        return np.nan
+
+    auc = np.trapezoid(
+        utilization,
+        episodes
+    )
+
+    normalized_auc = (
+        auc / episode_range
+    )
+
+    return normalized_auc
+
+
+def calculate_convergence_episode(
+    episodes,
+    utilization_smooth,
+    threshold_ratio=0.95,
+    patience=100
+):
+    """
+    Calculate Episodes-to-Convergence.
+
+    Convergence is defined as the first episode where
+    rolling utilization reaches at least:
+
+        threshold_ratio * maximum rolling utilization
+
+    and remains above that threshold for 'patience'
+    consecutive episodes.
+
+    Returns NaN if convergence is not reached.
+    """
+
+    episodes = np.asarray(episodes)
+
+    utilization_smooth = np.asarray(
+        utilization_smooth
+    )
+
+    if len(episodes) == 0:
+        return np.nan
+
+    # --------------------------------------------------------
+    # Best rolling utilization for this seed
+    # --------------------------------------------------------
+
+    max_utilization = np.nanmax(
+        utilization_smooth
+    )
+
+    threshold = (
+        threshold_ratio
+        * max_utilization
+    )
+
+    # --------------------------------------------------------
+    # Identify episodes above threshold
+    # --------------------------------------------------------
+
+    above_threshold = (
+        utilization_smooth >= threshold
+    )
+
+    # --------------------------------------------------------
+    # Find first run of 'patience' consecutive episodes
+    # --------------------------------------------------------
+
+    consecutive_count = 0
+
+    for i, is_above in enumerate(
+        above_threshold
+    ):
+
+        if is_above:
+
+            consecutive_count += 1
+
+            if consecutive_count >= patience:
+
+                convergence_index = (
+                    i - patience + 1
+                )
+
+                return episodes[
+                    convergence_index
+                ]
+
+        else:
+
+            consecutive_count = 0
+
+    return np.nan
+
+
+# ============================================================
+# CALCULATE AUC + CONVERGENCE FOR EACH SEED
+# ============================================================
+
+convergence_results = []
+
+for (model, seed), group in performance_data.groupby(
+    ["model", "seed"]
+):
+
+    group = (
+        group
+        .sort_values("episode")
+        .reset_index(drop=True)
+    )
+
+    episodes = group[
+        "episode"
+    ].to_numpy()
+
+    utilization = group[
+        "utilization"
+    ].to_numpy()
+
+    utilization_smooth = group[
+        "utilization_smooth"
+    ].to_numpy()
+
+    # --------------------------------------------------------
+    # AUC
+    # --------------------------------------------------------
+
+    auc = calculate_auc(
+        episodes,
+        utilization
+    )
+
+    # --------------------------------------------------------
+    # Maximum rolling utilization
+    # --------------------------------------------------------
+
+    max_rolling_utilization = np.nanmax(
+        utilization_smooth
+    )
+
+    # --------------------------------------------------------
+    # Convergence threshold
+    # --------------------------------------------------------
+
+    convergence_threshold = (
+        CONVERGENCE_THRESHOLD
+        * max_rolling_utilization
+    )
+
+    # --------------------------------------------------------
+    # Episodes-to-Convergence
+    # --------------------------------------------------------
+
+    convergence_episode = (
+        calculate_convergence_episode(
+            episodes,
+            utilization_smooth,
+            threshold_ratio=CONVERGENCE_THRESHOLD,
+            patience=CONVERGENCE_PATIENCE
+        )
+    )
+
+    convergence_results.append({
+
+        "model": model,
+
+        "seed": seed,
+
+        "AUC": auc,
+
+        "max_rolling_utilization":
+            max_rolling_utilization,
+
+        "convergence_threshold":
+            convergence_threshold,
+
+        "episodes_to_convergence":
+            convergence_episode,
+    })
+
+
+# ============================================================
+# PER-SEED CONVERGENCE RESULTS
+# ============================================================
+
+convergence_per_seed = pd.DataFrame(
+    convergence_results
+)
+
+
+convergence_per_seed = (
+    convergence_per_seed
+    .sort_values(
+        ["model", "seed"]
+    )
+    .reset_index(drop=True)
+)
+
+
+print("\n")
+print("=" * 100)
+print("CONVERGENCE SPEED + AUC — PER SEED")
+print("=" * 100)
+
+print(
+    convergence_per_seed.to_string(
+        index=False
+    )
+)
+
+
+convergence_per_seed.to_csv(
+    os.path.join(
+        OUTPUT_DIR,
+        "convergence_speed_per_seed.csv"
+    ),
+    index=False
+)
+
+
+# ============================================================
+# SUMMARY ACROSS SEEDS
+# ============================================================
+
+convergence_summary = (
+    convergence_per_seed
+    .groupby("model")
+    .agg(
+
+        AUC_mean=(
+            "AUC",
+            "mean"
+        ),
+
+        AUC_std=(
+            "AUC",
+            "std"
+        ),
+
+        convergence_episodes_mean=(
+            "episodes_to_convergence",
+            "mean"
+        ),
+
+        convergence_episodes_std=(
+            "episodes_to_convergence",
+            "std"
+        ),
+
+        max_utilization_mean=(
+            "max_rolling_utilization",
+            "mean"
+        ),
+
+        max_utilization_std=(
+            "max_rolling_utilization",
+            "std"
+        ),
+    )
+    .reset_index()
+)
+
+
+print("\n")
+print("=" * 100)
+print("CONVERGENCE SPEED + AUC — MEAN ± STD ACROSS SEEDS")
+print("=" * 100)
+
+print(
+    convergence_summary.to_string(
+        index=False
+    )
+)
+
+
+convergence_summary.to_csv(
+    os.path.join(
+        OUTPUT_DIR,
+        "convergence_speed_summary.csv"
+    ),
+    index=False
+)
+
+
+# ============================================================
 # PERFORMANCE PLOT FUNCTION
 # ============================================================
 
@@ -518,6 +838,247 @@ plot_training_performance(
     "optimality_gap_comparison.png"
 )
 
+# ============================================================
+# CONVERGENCE SPEED + AUC VISUALIZATION
+# ============================================================
+
+def plot_convergence_speed(
+    performance_df,
+    convergence_df,
+    filename
+):
+    """
+    Visualize convergence speed and AUC during training.
+
+    The plot shows:
+    - Rolling utilization averaged across seeds
+    - +/- 1 STD across seeds
+    - Mean Episodes-to-Convergence as a vertical dashed line
+    - AUC value for each model
+    """
+
+    plt.figure(figsize=(12, 7))
+
+    models = performance_df["model"].unique()
+
+    for model in models:
+
+        model_df = (
+            performance_df[
+                performance_df["model"] == model
+            ]
+            .sort_values("episode")
+        )
+
+        x = model_df["episode"]
+
+        y = model_df["utilization_mean"]
+
+        std = (
+            model_df["utilization_std"]
+            .fillna(0)
+        )
+
+        # ----------------------------------------------------
+        # Mean rolling utilization
+        # ----------------------------------------------------
+
+        plt.plot(
+            x,
+            y,
+            label=model
+        )
+
+        # ----------------------------------------------------
+        # +/- 1 STD across seeds
+        # ----------------------------------------------------
+
+        plt.fill_between(
+            x,
+            y - std,
+            y + std,
+            alpha=0.15
+        )
+
+        # ----------------------------------------------------
+        # Get convergence + AUC information
+        # ----------------------------------------------------
+
+        model_convergence = convergence_df[
+            convergence_df["model"] == model
+        ]
+
+        if len(model_convergence) == 0:
+            continue
+
+        mean_convergence = (
+            model_convergence[
+                "convergence_episodes_mean"
+            ]
+            .iloc[0]
+        )
+
+        mean_auc = (
+            model_convergence[
+                "AUC_mean"
+            ]
+            .iloc[0]
+        )
+
+        # ----------------------------------------------------
+        # Vertical convergence line
+        # ----------------------------------------------------
+
+        if pd.notna(mean_convergence):
+
+            plt.axvline(
+                mean_convergence,
+                linestyle="--",
+                alpha=0.8
+            )
+
+            # ------------------------------------------------
+            # Find utilization near convergence
+            # ------------------------------------------------
+
+            closest_idx = (
+                (
+                    model_df["episode"]
+                    - mean_convergence
+                )
+                .abs()
+                .idxmin()
+            )
+
+            convergence_y = (
+                model_df.loc[
+                    closest_idx,
+                    "utilization_mean"
+                ]
+            )
+
+            # ------------------------------------------------
+            # Convergence label
+            # ------------------------------------------------
+
+            plt.annotate(
+                f"Convergence ≈ "
+                f"{mean_convergence:.0f}",
+                xy=(
+                    mean_convergence,
+                    convergence_y
+                ),
+                xytext=(
+                    8,
+                    15
+                ),
+                textcoords="offset points",
+                fontsize=9
+            )
+
+    # ========================================================
+    # AUC TEXT BOX
+    # ========================================================
+
+    auc_lines = []
+
+    for model in models:
+
+        model_convergence = convergence_df[
+            convergence_df["model"] == model
+        ]
+
+        if len(model_convergence) == 0:
+            continue
+
+        mean_auc = (
+            model_convergence[
+                "AUC_mean"
+            ]
+            .iloc[0]
+        )
+
+        std_auc = (
+            model_convergence[
+                "AUC_std"
+            ]
+            .iloc[0]
+        )
+
+        if pd.notna(mean_auc):
+
+            auc_lines.append(
+                f"{model}: "
+                f"AUC = {mean_auc:.4f} "
+                f"± {std_auc:.4f}"
+            )
+
+    auc_text = (
+        "Learning Efficiency (AUC)\n"
+        + "\n".join(auc_lines)
+    )
+
+    # --------------------------------------------------------
+    # Add AUC information to the graph
+    # --------------------------------------------------------
+
+    plt.text(
+        0.02,
+        0.03,
+        auc_text,
+        transform=plt.gca().transAxes,
+        fontsize=9,
+        verticalalignment="bottom",
+        bbox=dict(
+            boxstyle="round",
+            alpha=0.85
+        )
+    )
+
+    # ========================================================
+    # GRAPH FORMATTING
+    # ========================================================
+
+    plt.xlabel("Episode")
+
+    plt.ylabel("Mean Utilization")
+
+    plt.title(
+        "Convergence Speed and Learning Efficiency"
+    )
+
+    # Force graph to show up to Episode 5000
+    plt.xlim(
+        0,
+        MAX_EPISODE
+    )
+
+    plt.legend()
+
+    plt.grid(True)
+
+    plt.tight_layout()
+
+    plt.savefig(
+        os.path.join(
+            OUTPUT_DIR,
+            filename
+        ),
+        dpi=300
+    )
+
+    plt.show()
+
+
+# ============================================================
+# CREATE CONVERGENCE SPEED + AUC PLOT
+# ============================================================
+
+plot_convergence_speed(
+    performance_across_seeds,
+    convergence_summary,
+    "convergence_speed_comparison.png"
+)
 
 # ============================================================
 # ============================================================
@@ -859,6 +1420,54 @@ for _, row in model_statistics.iterrows():
         f"{row['gradient_norm_mean']:.6f} "
         f"+/- "
         f"{row['gradient_norm_seed_std']:.6f}"
+    )
+
+
+# ============================================================
+# FINAL CONVERGENCE SUMMARY
+# ============================================================
+
+print("\n")
+print("=" * 100)
+print("FINAL CONVERGENCE SPEED + AUC")
+print("=" * 100)
+
+for _, row in convergence_summary.iterrows():
+
+    print(
+        f"\n{row['model']}"
+    )
+
+    print(
+        f"AUC: "
+        f"{row['AUC_mean']:.6f} "
+        f"+/- "
+        f"{row['AUC_std']:.6f}"
+    )
+
+    if pd.notna(
+        row["convergence_episodes_mean"]
+    ):
+
+        print(
+            f"Convergence Episodes: "
+            f"{row['convergence_episodes_mean']:.2f} "
+            f"+/- "
+            f"{row['convergence_episodes_std']:.2f}"
+        )
+
+    else:
+
+        print(
+            "Convergence Episodes: "
+            "Not reached"
+        )
+
+    print(
+        f"Maximum Rolling Utilization: "
+        f"{row['max_utilization_mean']:.6f} "
+        f"+/- "
+        f"{row['max_utilization_std']:.6f}"
     )
 
 
