@@ -25,12 +25,21 @@ MAX_EPISODE = 5000
 # CONVERGENCE CONFIGURATION
 # ============================================================
 
-# Percentage of the best rolling utilization used as threshold
-CONVERGENCE_THRESHOLD = 0.95
+# Percentage of the final stable plateau used
+# to define the lower stability boundary
+CONVERGENCE_THRESHOLD = 0.98
 
-# Number of consecutive episodes that must remain above
-# the threshold to consider the model converged
+# Number of consecutive episodes that must remain
+# inside the stability band
 CONVERGENCE_PATIENCE = 100
+
+# Number of final episodes used to estimate
+# the final stable plateau
+PLATEAU_WINDOW = 200
+
+# Percentage around the final plateau considered stable
+# Example: 0.05 means +/- 5%
+STABILITY_BAND = 0.05
 
 OUTPUT_DIR = "train_analysis"
 
@@ -326,11 +335,9 @@ model_statistics.to_csv(
 
 
 # ============================================================
-# ============================================================
 # TRAINING PERFORMANCE
 # UTILIZATION + OPTIMALITY GAP
 # ONLY THESE TWO USE ROLLING SMOOTHING
-# ============================================================
 # ============================================================
 
 performance_data = data[
@@ -430,17 +437,20 @@ performance_across_seeds.to_csv(
 
 
 # ============================================================
-# ============================================================
-# CONVERGENCE SPEED + AUC
-# ============================================================
+# AUC
 # ============================================================
 
-def calculate_auc(episodes, utilization):
+def calculate_auc(
+    episodes,
+    utilization
+):
     """
     Calculate normalized AUC using the trapezoidal rule.
 
     The result represents the average utilization
-    over the training process.
+    over the entire training process.
+
+    Higher AUC indicates better learning efficiency.
     """
 
     episodes = np.asarray(episodes)
@@ -468,24 +478,46 @@ def calculate_auc(episodes, utilization):
     return normalized_auc
 
 
+# ============================================================
+# CONVERGENCE BASED ON STABLE FINAL PLATEAU
+# ============================================================
+
 def calculate_convergence_episode(
     episodes,
     utilization_smooth,
     threshold_ratio=0.95,
-    patience=100
+    patience=100,
+    plateau_window=200,
+    stability_band=0.05
 ):
     """
-    Calculate Episodes-to-Convergence.
+    Calculate Episodes-to-Convergence based on stabilization.
 
-    Convergence is defined as the first episode where
-    rolling utilization reaches at least:
+    Convergence is NOT defined by a temporary peak.
 
-        threshold_ratio * maximum rolling utilization
+    Instead:
 
-    and remains above that threshold for 'patience'
-    consecutive episodes.
+    1. Estimate the final performance plateau using
+       the mean rolling utilization over the last
+       'plateau_window' episodes.
 
-    Returns NaN if convergence is not reached.
+    2. Define a stability interval around the plateau:
+
+           lower_bound = 0.95 * plateau
+           upper_bound = 1.05 * plateau
+
+    3. Find the first episode where rolling utilization
+       enters this interval and remains inside it for
+       'patience' consecutive episodes.
+
+    This ensures that convergence represents a stable
+    learning phase rather than a temporary performance peak.
+
+    Returns:
+        convergence_episode
+        final_plateau
+        lower_bound
+        upper_bound
     """
 
     episodes = np.asarray(episodes)
@@ -495,40 +527,80 @@ def calculate_convergence_episode(
     )
 
     if len(episodes) == 0:
-        return np.nan
+        return np.nan, np.nan, np.nan, np.nan
 
     # --------------------------------------------------------
-    # Best rolling utilization for this seed
+    # Remove NaN values
     # --------------------------------------------------------
 
-    max_utilization = np.nanmax(
-        utilization_smooth
+    valid_mask = (
+        np.isfinite(utilization_smooth)
+        & np.isfinite(episodes)
     )
 
-    threshold = (
+    episodes = episodes[valid_mask]
+    utilization_smooth = utilization_smooth[valid_mask]
+
+    if len(episodes) == 0:
+        return np.nan, np.nan, np.nan, np.nan
+
+    # --------------------------------------------------------
+    # Estimate final stable plateau
+    # --------------------------------------------------------
+
+    actual_plateau_window = min(
+        plateau_window,
+        len(utilization_smooth)
+    )
+
+    final_plateau = np.mean(
+        utilization_smooth[
+            -actual_plateau_window:
+        ]
+    )
+
+    # --------------------------------------------------------
+    # Stability interval
+    # --------------------------------------------------------
+
+    lower_bound = (
         threshold_ratio
-        * max_utilization
+        * final_plateau
+    )
+
+    upper_bound = (
+        (1.0 + stability_band)
+        * final_plateau
     )
 
     # --------------------------------------------------------
-    # Identify episodes above threshold
+    # Identify stable region
+    #
+    # We use both:
+    #   utilization >= 95% of plateau
+    #
+    # and
+    #   utilization <= 105% of plateau
+    #
+    # This prevents a temporary overshoot from
+    # being interpreted as convergence.
     # --------------------------------------------------------
 
-    above_threshold = (
-        utilization_smooth >= threshold
+    stable = (
+        (utilization_smooth >= lower_bound)
+        &
+        (utilization_smooth <= upper_bound)
     )
 
     # --------------------------------------------------------
-    # Find first run of 'patience' consecutive episodes
+    # Find first stable run
     # --------------------------------------------------------
 
     consecutive_count = 0
 
-    for i, is_above in enumerate(
-        above_threshold
-    ):
+    for i, is_stable in enumerate(stable):
 
-        if is_above:
+        if is_stable:
 
             consecutive_count += 1
 
@@ -538,15 +610,23 @@ def calculate_convergence_episode(
                     i - patience + 1
                 )
 
-                return episodes[
-                    convergence_index
-                ]
+                return (
+                    episodes[convergence_index],
+                    final_plateau,
+                    lower_bound,
+                    upper_bound
+                )
 
         else:
 
             consecutive_count = 0
 
-    return np.nan
+    return (
+        np.nan,
+        final_plateau,
+        lower_bound,
+        upper_bound
+    )
 
 
 # ============================================================
@@ -587,34 +667,31 @@ for (model, seed), group in performance_data.groupby(
     )
 
     # --------------------------------------------------------
-    # Maximum rolling utilization
+    # Convergence
     # --------------------------------------------------------
 
-    max_rolling_utilization = np.nanmax(
-        utilization_smooth
+    (
+        convergence_episode,
+        final_plateau,
+        convergence_lower_bound,
+        convergence_upper_bound
+    ) = calculate_convergence_episode(
+
+        episodes,
+        utilization_smooth,
+
+        threshold_ratio=CONVERGENCE_THRESHOLD,
+
+        patience=CONVERGENCE_PATIENCE,
+
+        plateau_window=PLATEAU_WINDOW,
+
+        stability_band=STABILITY_BAND
     )
 
     # --------------------------------------------------------
-    # Convergence threshold
+    # Save results
     # --------------------------------------------------------
-
-    convergence_threshold = (
-        CONVERGENCE_THRESHOLD
-        * max_rolling_utilization
-    )
-
-    # --------------------------------------------------------
-    # Episodes-to-Convergence
-    # --------------------------------------------------------
-
-    convergence_episode = (
-        calculate_convergence_episode(
-            episodes,
-            utilization_smooth,
-            threshold_ratio=CONVERGENCE_THRESHOLD,
-            patience=CONVERGENCE_PATIENCE
-        )
-    )
 
     convergence_results.append({
 
@@ -624,11 +701,14 @@ for (model, seed), group in performance_data.groupby(
 
         "AUC": auc,
 
-        "max_rolling_utilization":
-            max_rolling_utilization,
+        "final_plateau":
+            final_plateau,
 
-        "convergence_threshold":
-            convergence_threshold,
+        "convergence_lower_bound":
+            convergence_lower_bound,
+
+        "convergence_upper_bound":
+            convergence_upper_bound,
 
         "episodes_to_convergence":
             convergence_episode,
@@ -703,14 +783,24 @@ convergence_summary = (
             "std"
         ),
 
-        max_utilization_mean=(
-            "max_rolling_utilization",
+        final_plateau_mean=(
+            "final_plateau",
             "mean"
         ),
 
-        max_utilization_std=(
-            "max_rolling_utilization",
+        final_plateau_std=(
+            "final_plateau",
             "std"
+        ),
+
+        convergence_lower_bound_mean=(
+            "convergence_lower_bound",
+            "mean"
+        ),
+
+        convergence_upper_bound_mean=(
+            "convergence_upper_bound",
+            "mean"
         ),
     )
     .reset_index()
@@ -789,7 +879,6 @@ def plot_training_performance(
 
     plt.title(title)
 
-    # Force the graph to show up to Episode 5000
     plt.xlim(
         0,
         MAX_EPISODE
@@ -820,7 +909,7 @@ plot_training_performance(
     "utilization_mean",
     "utilization_std",
     "Mean Utilization",
-    "Training Utilization — Mean ± STD Across Seeds with Rolling Window (100 Episodes)",
+    "Training Utilization - Mean ± STD Across Seeds with Rolling Window (100 Episodes)",
     "utilization_comparison.png"
 )
 
@@ -834,9 +923,10 @@ plot_training_performance(
     "optimality_gap_mean",
     "optimality_gap_std",
     "Mean Optimality Gap",
-    "Training Optimality Gap — Mean ± STD Across Seeds with Rolling Window (100 Episodes)",
+    "Training Optimality Gap - Mean ± STD Across Seeds with Rolling Window (100 Episodes)",
     "optimality_gap_comparison.png"
 )
+
 
 # ============================================================
 # CONVERGENCE SPEED + AUC VISUALIZATION
@@ -848,18 +938,30 @@ def plot_convergence_speed(
     filename
 ):
     """
-    Visualize convergence speed and AUC during training.
+    Visualize convergence speed and learning efficiency.
 
     The plot shows:
+
     - Rolling utilization averaged across seeds
     - +/- 1 STD across seeds
-    - Mean Episodes-to-Convergence as a vertical dashed line
-    - AUC value for each model
+    - Mean Episodes-to-Convergence
+    - Convergence lines colored according to
+      the corresponding model curve
+    - Final stable plateau
+    - AUC for each model
+
+    Convergence represents stabilization around
+    the final performance plateau rather than
+    a temporary peak.
     """
 
     plt.figure(figsize=(12, 7))
 
     models = performance_df["model"].unique()
+
+    # Store model colors so the vertical convergence
+    # line has exactly the same color as the model curve.
+    model_colors = {}
 
     for model in models:
 
@@ -883,11 +985,17 @@ def plot_convergence_speed(
         # Mean rolling utilization
         # ----------------------------------------------------
 
-        plt.plot(
+        line, = plt.plot(
             x,
             y,
             label=model
         )
+
+        # ----------------------------------------------------
+        # Store the exact color of this model
+        # ----------------------------------------------------
+
+        model_colors[model] = line.get_color()
 
         # ----------------------------------------------------
         # +/- 1 STD across seeds
@@ -925,8 +1033,30 @@ def plot_convergence_speed(
             .iloc[0]
         )
 
+        final_plateau = (
+            model_convergence[
+                "final_plateau_mean"
+            ]
+            .iloc[0]
+        )
+
+        lower_bound = (
+            model_convergence[
+                "convergence_lower_bound_mean"
+            ]
+            .iloc[0]
+        )
+
+        upper_bound = (
+            model_convergence[
+                "convergence_upper_bound_mean"
+            ]
+            .iloc[0]
+        )
+
         # ----------------------------------------------------
         # Vertical convergence line
+        # SAME COLOR AS MODEL
         # ----------------------------------------------------
 
         if pd.notna(mean_convergence):
@@ -934,7 +1064,8 @@ def plot_convergence_speed(
             plt.axvline(
                 mean_convergence,
                 linestyle="--",
-                alpha=0.8
+                color=model_colors[model],
+                alpha=0.85
             )
 
             # ------------------------------------------------
@@ -962,19 +1093,40 @@ def plot_convergence_speed(
             # ------------------------------------------------
 
             plt.annotate(
+                f"{model}: "
                 f"Convergence ≈ "
                 f"{mean_convergence:.0f}",
+
                 xy=(
                     mean_convergence,
                     convergence_y
                 ),
+
                 xytext=(
                     8,
                     15
                 ),
+
                 textcoords="offset points",
-                fontsize=9
+
+                fontsize=9,
+
+                color=model_colors[model]
             )
+
+        # ----------------------------------------------------
+        # Final plateau horizontal reference
+        # ----------------------------------------------------
+
+        if pd.notna(final_plateau):
+
+            plt.axhline(
+                final_plateau,
+                linestyle=":",
+                color=model_colors[model],
+                alpha=0.45
+            )
+
 
     # ========================================================
     # AUC TEXT BOX
@@ -1019,7 +1171,7 @@ def plot_convergence_speed(
     )
 
     # --------------------------------------------------------
-    # Add AUC information to the graph
+    # Add AUC information
     # --------------------------------------------------------
 
     plt.text(
@@ -1035,6 +1187,7 @@ def plot_convergence_speed(
         )
     )
 
+
     # ========================================================
     # GRAPH FORMATTING
     # ========================================================
@@ -1044,10 +1197,9 @@ def plot_convergence_speed(
     plt.ylabel("Mean Utilization")
 
     plt.title(
-        "Convergence Speed and Learning Efficiency"
+        "Convergence Speed and  Training Utilization - Mean ± STD Across Seeds with Rolling Window (100 Episodes)"
     )
 
-    # Force graph to show up to Episode 5000
     plt.xlim(
         0,
         MAX_EPISODE
@@ -1080,11 +1232,9 @@ plot_convergence_speed(
     "convergence_speed_comparison.png"
 )
 
-# ============================================================
+
 # ============================================================
 # WINDOW ANALYSIS
-# EVERYTHING BELOW REMAINS AS IN YOUR ORIGINAL CODE
-# ============================================================
 # ============================================================
 
 data["window"] = (
@@ -1277,7 +1427,9 @@ def plot_metric(
         ]
 
         x = model_df["episode_start"]
+
         y = model_df[mean_column]
+
         std = model_df[std_column]
 
         plt.plot(
@@ -1286,7 +1438,6 @@ def plot_metric(
             label=model
         )
 
-        # Mean ± STD across seeds
         plt.fill_between(
             x,
             y - std,
@@ -1317,13 +1468,6 @@ def plot_metric(
 # ============================================================
 # LEARNING CURVES
 # ============================================================
-
-# NOTE:
-# Utilization and Optimality Gap are NOT plotted here anymore.
-# They are plotted above using Rolling Mean.
-#
-# The four plots below remain unchanged.
-
 
 plot_metric(
     window_across_seeds,
@@ -1464,10 +1608,20 @@ for _, row in convergence_summary.iterrows():
         )
 
     print(
-        f"Maximum Rolling Utilization: "
-        f"{row['max_utilization_mean']:.6f} "
+        f"Final Stable Plateau: "
+        f"{row['final_plateau_mean']:.6f} "
         f"+/- "
-        f"{row['max_utilization_std']:.6f}"
+        f"{row['final_plateau_std']:.6f}"
+    )
+
+    print(
+        f"Stability Lower Bound: "
+        f"{row['convergence_lower_bound_mean']:.6f}"
+    )
+
+    print(
+        f"Stability Upper Bound: "
+        f"{row['convergence_upper_bound_mean']:.6f}"
     )
 
 
