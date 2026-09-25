@@ -595,7 +595,7 @@ print("Test:", len(test_instances))
 # Multiple Seeds
 # ==================================================
 
-seeds = [6,17,19,23,21,22,24]
+seeds = [25]
 
 for seed in seeds:
 
