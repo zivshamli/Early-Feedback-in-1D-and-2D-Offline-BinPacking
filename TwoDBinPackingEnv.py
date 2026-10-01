@@ -29,8 +29,8 @@ class Offline2DBinPackingEnv:
         - boundary checking
         - stability checking
         - utilization
-        - packing density
-        - stability metric
+        - packing density based on item contacts
+        - item stability metric
         - fixed-size state vector
         - visualization
     """
@@ -60,8 +60,8 @@ class Offline2DBinPackingEnv:
             Maximum number of items supported by the state vector.
 
         stability_threshold : float
-            Minimum fraction of the item's width that must be supported
-            for an item not placed on the floor.
+            Minimum fraction of the item's width that must be exceeded
+            for an elevated item to be considered stable.
 
         grid_size : int or float
             Spatial discretization used for positions.
@@ -844,74 +844,76 @@ class Offline2DBinPackingEnv:
 
     def _calculate_density(self):
         """
-        Packing density measures how compactly the items are
-        arranged inside each used bin.
+        Calculate Packing Density based on item contacts.
 
-        For each bin:
+        For each bin, a contact is counted when two items share a
+        positive-length boundary segment (horizontal or vertical).
+        Corner-only contact is not counted.
 
-            density =
-                occupied item area
-                -----------------
-                bounding rectangle area
+        Packing density is normalized to [0, 1]:
 
-        Overall density is calculated using the total areas.
+            total contacts
+            -----------------------------
+            total possible pairs per bin
         """
 
         if len(self.bins) == 0:
             return 0.0
 
-        total_item_area = 0.0
-        total_bounding_area = 0.0
+        total_contacts = 0
+        total_possible_pairs = 0
 
         for bin_items in self.bins:
+            n = len(bin_items)
 
-            if not bin_items:
+            if n < 2:
                 continue
 
-            min_x = min(
-                item["x"]
-                for item in bin_items
-            )
+            total_possible_pairs += n * (n - 1) // 2
 
-            min_y = min(
-                item["y"]
-                for item in bin_items
-            )
+            for i in range(n):
+                item_a = bin_items[i]
 
-            max_x = max(
-                item["x"] + item["width"]
-                for item in bin_items
-            )
+                a_left = item_a["x"]
+                a_right = item_a["x"] + item_a["width"]
+                a_bottom = item_a["y"]
+                a_top = item_a["y"] + item_a["height"]
 
-            max_y = max(
-                item["y"] + item["height"]
-                for item in bin_items
-            )
+                for j in range(i + 1, n):
+                    item_b = bin_items[j]
 
-            bounding_width = max_x - min_x
-            bounding_height = max_y - min_y
+                    b_left = item_b["x"]
+                    b_right = item_b["x"] + item_b["width"]
+                    b_bottom = item_b["y"]
+                    b_top = item_b["y"] + item_b["height"]
 
-            bounding_area = (
-                bounding_width
-                * bounding_height
-            )
+                    # Vertical shared boundary:
+                    # one item's right side touches the other's left side.
+                    vertical_contact = (
+                        (
+                            np.isclose(a_right, b_left)
+                            or np.isclose(b_right, a_left)
+                        )
+                        and min(a_top, b_top) > max(a_bottom, b_bottom)
+                    )
 
-            item_area = sum(
-                item["width"]
-                * item["height"]
-                for item in bin_items
-            )
+                    # Horizontal shared boundary:
+                    # one item's top side touches the other's bottom side.
+                    horizontal_contact = (
+                        (
+                            np.isclose(a_top, b_bottom)
+                            or np.isclose(b_top, a_bottom)
+                        )
+                        and min(a_right, b_right) > max(a_left, b_left)
+                    )
 
-            total_item_area += item_area
-            total_bounding_area += bounding_area
+                    if vertical_contact or horizontal_contact:
+                        total_contacts += 1
 
-        if total_bounding_area <= 0:
+        if total_possible_pairs == 0:
             return 0.0
 
-        return (
-            total_item_area
-            / total_bounding_area
-        )
+        return total_contacts / total_possible_pairs
 
     # ============================================================
     # STABILITY METRIC
@@ -919,32 +921,35 @@ class Offline2DBinPackingEnv:
 
     def _calculate_stability(self):
         """
-        Calculate the average stability of all placed items.
+        Calculate the proportion of stable items.
 
-        Floor items have stability = 1.
+        An item is stable if:
+        1. It is placed directly on the bin floor, or
+        2. More than stability_threshold (default 50%) of its base
+           is supported by items directly below it.
 
-        For elevated items:
+        Therefore:
 
-            stability =
-                supported width / item width
+            ItemStability =
+                number of stable items / total number of items
 
         The result is in [0, 1].
         """
 
-        stability_values = []
+        total_items = 0
+        stable_items = 0
 
-        for bin_index, bin_items in enumerate(self.bins):
-
+        for bin_items in self.bins:
             for item in bin_items:
+                total_items += 1
 
                 x = item["x"]
                 y = item["y"]
                 width = item["width"]
-                height = item["height"]
 
-                # Floor item
+                # Items placed on the floor are stable.
                 if np.isclose(y, 0.0):
-                    stability_values.append(1.0)
+                    stable_items += 1
                     continue
 
                 item_left = x
@@ -954,68 +959,43 @@ class Offline2DBinPackingEnv:
                 supported_segments = []
 
                 for other_item in bin_items:
-
-                    # Do not compare item with itself
-                    if (
-                        other_item
-                        is item
-                    ):
+                    if other_item is item:
                         continue
 
                     other_top = (
-                        other_item["y"]
-                        + other_item["height"]
+                        other_item["y"] + other_item["height"]
                     )
 
-                    if not np.isclose(
-                        other_top,
-                        item_bottom
-                    ):
+                    # Support must come directly from below.
+                    if not np.isclose(other_top, item_bottom):
                         continue
 
                     other_left = other_item["x"]
-
                     other_right = (
-                        other_item["x"]
-                        + other_item["width"]
+                        other_item["x"] + other_item["width"]
                     )
 
-                    overlap_left = max(
-                        item_left,
-                        other_left
-                    )
-
-                    overlap_right = min(
-                        item_right,
-                        other_right
-                    )
+                    overlap_left = max(item_left, other_left)
+                    overlap_right = min(item_right, other_right)
 
                     overlap_width = (
-                        overlap_right
-                        - overlap_left
+                        overlap_right - overlap_left
                     )
 
                     if overlap_width > 0:
                         supported_segments.append(
-                            (
-                                overlap_left,
-                                overlap_right
-                            )
+                            (overlap_left, overlap_right)
                         )
 
                 if not supported_segments:
-                    stability_values.append(0.0)
                     continue
 
-                # Merge support intervals
+                # Merge overlapping support intervals.
                 supported_segments.sort()
 
-                merged = [
-                    supported_segments[0]
-                ]
+                merged = [supported_segments[0]]
 
                 for start, end in supported_segments[1:]:
-
                     last_start, last_end = merged[-1]
 
                     if start <= last_end:
@@ -1024,31 +1004,27 @@ class Offline2DBinPackingEnv:
                             max(last_end, end)
                         )
                     else:
-                        merged.append(
-                            (start, end)
-                        )
+                        merged.append((start, end))
 
                 supported_width = sum(
                     end - start
                     for start, end in merged
                 )
 
-                stability = (
+                support_ratio = (
                     supported_width / width
                     if width > 0
                     else 0.0
                 )
 
-                stability_values.append(
-                    min(1.0, stability)
-                )
+                # Stable only when MORE than 50% is supported.
+                if support_ratio > self.stability_threshold:
+                    stable_items += 1
 
-        if not stability_values:
+        if total_items == 0:
             return 0.0
 
-        return float(
-            np.mean(stability_values)
-        )
+        return stable_items / total_items
 
     # ============================================================
     # STATE VECTOR
