@@ -595,7 +595,7 @@ print("Test:", len(test_instances))
 # Multiple Seeds
 # ==================================================
 
-seeds = [25]
+seeds = [43]
 
 for seed in seeds:
 
@@ -625,7 +625,7 @@ for seed in seeds:
 
     # now we can initialize the agent with the correct state dimension,and train the agent on the training instances, validate on the validation instances, and finally evaluate on the test instances.
 
-    
+    '''
     agent = MonteCarloActorCritic(
 
         actor_state_dim=state_dim,
@@ -652,6 +652,7 @@ for seed in seeds:
     )
 
     '''
+    '''
     
     agent = TDEarlyFeedbackActorCritic(
         actor_state_dim=state_dim,
@@ -673,7 +674,7 @@ for seed in seeds:
     )
     '''
     
-    '''
+    
     agent = TDActorCritic(
         actor_state_dim=state_dim,
         critic_state_dim=state_dim
@@ -688,10 +689,10 @@ for seed in seeds:
         episodes=5000,
         validation_interval=200
     )
-    '''
-
     
 
+    
+    
     test_results = evaluate(
         agent,
         test_instances
