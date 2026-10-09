@@ -14,7 +14,6 @@ class BinPacking2DInstance:
     bin_height: float
     num_items: int
     optimal_bins: int
-    lower_bound: int
     items: list
 
 
@@ -108,13 +107,13 @@ class PackLib2DLoader:
         solution = data.get("Solution", {})
 
         optimal_bins = solution.get("OptimalBins")
-        lower_bound = solution.get("LowerBound")
 
         if optimal_bins is not None:
             optimal_bins = int(optimal_bins)
+        else:
+            optimal_bins = solution.get("LowerBound")    
 
-        if lower_bound is not None:
-            lower_bound = int(lower_bound)
+
 
         instances.append(
             BinPacking2DInstance(
@@ -123,7 +122,6 @@ class PackLib2DLoader:
                 bin_height=bin_height,
                 num_items=num_items,
                 optimal_bins=optimal_bins,
-                lower_bound=lower_bound,
                 items=items
             )
         )
@@ -281,8 +279,7 @@ class PackLib2DLoader:
                 f"{inst.name}: "
                 f"items={inst.num_items}, "
                 f"bin={inst.bin_width}x{inst.bin_height}, "
-                f"opt={inst.optimal_bins}, "
-                f"LB={inst.lower_bound}"
+                f"opt={inst.optimal_bins} "
             )
 
     # =====================================================
@@ -337,5 +334,4 @@ if __name__ == "__main__":
         print("Number of items:", instance.num_items)
         print("Items:", instance.items)
         print("Optimal bins:", instance.optimal_bins)
-        print("Lower bound:", instance.lower_bound)
 
