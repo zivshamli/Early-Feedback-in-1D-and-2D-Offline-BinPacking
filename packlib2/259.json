@@ -1,0 +1,115 @@
+{
+    "Name": "CLASS06_020_09",
+    "Objects": [
+        {
+            "Length": 300,
+            "Height": 300
+        }
+    ],
+    "Items": [
+        {
+            "Length": 53,
+            "Height": 36,
+            "Demand": 1
+        },
+        {
+            "Length": 25,
+            "Height": 36,
+            "Demand": 1
+        },
+        {
+            "Length": 97,
+            "Height": 43,
+            "Demand": 1
+        },
+        {
+            "Length": 59,
+            "Height": 78,
+            "Demand": 1
+        },
+        {
+            "Length": 32,
+            "Height": 97,
+            "Demand": 1
+        },
+        {
+            "Length": 73,
+            "Height": 89,
+            "Demand": 1
+        },
+        {
+            "Length": 70,
+            "Height": 75,
+            "Demand": 1
+        },
+        {
+            "Length": 45,
+            "Height": 13,
+            "Demand": 1
+        },
+        {
+            "Length": 55,
+            "Height": 90,
+            "Demand": 1
+        },
+        {
+            "Length": 87,
+            "Height": 29,
+            "Demand": 1
+        },
+        {
+            "Length": 64,
+            "Height": 85,
+            "Demand": 1
+        },
+        {
+            "Length": 42,
+            "Height": 48,
+            "Demand": 1
+        },
+        {
+            "Length": 10,
+            "Height": 39,
+            "Demand": 1
+        },
+        {
+            "Length": 89,
+            "Height": 13,
+            "Demand": 1
+        },
+        {
+            "Length": 36,
+            "Height": 61,
+            "Demand": 1
+        },
+        {
+            "Length": 39,
+            "Height": 4,
+            "Demand": 1
+        },
+        {
+            "Length": 20,
+            "Height": 97,
+            "Demand": 1
+        },
+        {
+            "Length": 35,
+            "Height": 30,
+            "Demand": 1
+        },
+        {
+            "Length": 73,
+            "Height": 25,
+            "Demand": 1
+        },
+        {
+            "Length": 57,
+            "Height": 37,
+            "Demand": 1
+        }
+    ],
+    "Solution": {
+        "OptimalBins": 1,
+        "LowerBound": 1
+    }
+}

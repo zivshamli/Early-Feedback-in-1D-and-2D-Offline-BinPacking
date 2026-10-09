@@ -1,0 +1,211 @@
+{
+    "Name": "CLASS09_040_01",
+    "Objects": [
+        {
+            "Length": 100,
+            "Height": 100
+        }
+    ],
+    "Items": [
+        {
+            "Length": 36,
+            "Height": 72,
+            "Demand": 1
+        },
+        {
+            "Length": 98,
+            "Height": 55,
+            "Demand": 1
+        },
+        {
+            "Length": 66,
+            "Height": 53,
+            "Demand": 1
+        },
+        {
+            "Length": 60,
+            "Height": 95,
+            "Demand": 1
+        },
+        {
+            "Length": 74,
+            "Height": 50,
+            "Demand": 1
+        },
+        {
+            "Length": 84,
+            "Height": 13,
+            "Demand": 1
+        },
+        {
+            "Length": 72,
+            "Height": 1,
+            "Demand": 1
+        },
+        {
+            "Length": 95,
+            "Height": 57,
+            "Demand": 1
+        },
+        {
+            "Length": 74,
+            "Height": 53,
+            "Demand": 1
+        },
+        {
+            "Length": 66,
+            "Height": 81,
+            "Demand": 1
+        },
+        {
+            "Length": 16,
+            "Height": 72,
+            "Demand": 1
+        },
+        {
+            "Length": 91,
+            "Height": 82,
+            "Demand": 1
+        },
+        {
+            "Length": 90,
+            "Height": 19,
+            "Demand": 1
+        },
+        {
+            "Length": 68,
+            "Height": 61,
+            "Demand": 1
+        },
+        {
+            "Length": 83,
+            "Height": 80,
+            "Demand": 1
+        },
+        {
+            "Length": 99,
+            "Height": 68,
+            "Demand": 1
+        },
+        {
+            "Length": 58,
+            "Height": 95,
+            "Demand": 1
+        },
+        {
+            "Length": 88,
+            "Height": 4,
+            "Demand": 1
+        },
+        {
+            "Length": 74,
+            "Height": 13,
+            "Demand": 1
+        },
+        {
+            "Length": 68,
+            "Height": 66,
+            "Demand": 1
+        },
+        {
+            "Length": 44,
+            "Height": 88,
+            "Demand": 1
+        },
+        {
+            "Length": 57,
+            "Height": 56,
+            "Demand": 1
+        },
+        {
+            "Length": 52,
+            "Height": 56,
+            "Demand": 1
+        },
+        {
+            "Length": 100,
+            "Height": 75,
+            "Demand": 1
+        },
+        {
+            "Length": 94,
+            "Height": 33,
+            "Demand": 1
+        },
+        {
+            "Length": 95,
+            "Height": 72,
+            "Demand": 1
+        },
+        {
+            "Length": 55,
+            "Height": 61,
+            "Demand": 1
+        },
+        {
+            "Length": 43,
+            "Height": 98,
+            "Demand": 1
+        },
+        {
+            "Length": 49,
+            "Height": 96,
+            "Demand": 1
+        },
+        {
+            "Length": 43,
+            "Height": 100,
+            "Demand": 1
+        },
+        {
+            "Length": 79,
+            "Height": 30,
+            "Demand": 1
+        },
+        {
+            "Length": 47,
+            "Height": 86,
+            "Demand": 1
+        },
+        {
+            "Length": 68,
+            "Height": 67,
+            "Demand": 1
+        },
+        {
+            "Length": 53,
+            "Height": 87,
+            "Demand": 1
+        },
+        {
+            "Length": 96,
+            "Height": 58,
+            "Demand": 1
+        },
+        {
+            "Length": 63,
+            "Height": 73,
+            "Demand": 1
+        },
+        {
+            "Length": 100,
+            "Height": 2,
+            "Demand": 1
+        },
+        {
+            "Length": 75,
+            "Height": 88,
+            "Demand": 1
+        },
+        {
+            "Length": 83,
+            "Height": 99,
+            "Demand": 1
+        },
+        {
+            "Length": 41,
+            "Height": 30,
+            "Demand": 1
+        }
+    ]
+}
