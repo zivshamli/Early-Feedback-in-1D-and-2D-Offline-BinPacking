@@ -40,7 +40,7 @@ class Offline2DBinPackingEnv:
         items,
         bin_width,
         bin_height,
-        max_items=100,
+        max_items=600,
         stability_threshold=0.5,
         grid_size=1
     ):
