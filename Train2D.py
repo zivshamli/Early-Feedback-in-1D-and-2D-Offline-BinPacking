@@ -269,8 +269,8 @@ loader.load()
 
 train_instances, validation_instances, test_instances = (
     loader.train_val_test_split(
-        test_size=0.20,
-        val_size=0.10,
+        test_size=0.2,
+        val_size=0.1,
         seed=42
     )
 )
@@ -328,8 +328,8 @@ for seed in seeds:
         actor_state_dim=state_dim,
         critic_state_dim=state_dim,
         alpha=100.0,
-        beta=100.0,
-        mu=100.0
+        beta=10.0,
+        mu=5.0
     )
 
     agent_type = "MC_2D"
