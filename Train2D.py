@@ -42,12 +42,14 @@ def evaluate(agent, instances):
                 grid_size=1
             )
 
-            _, reward = agent.generate_episode(
+            episode_data = agent.generate_episode(
                 env,
                 episode=0
             )
 
-            metrics = env.calculate_metrics()
+            reward = episode_data["terminal_reward"]
+            metrics = episode_data["metrics"]
+
 
             bins = len(env.bins)
 
@@ -71,6 +73,8 @@ def evaluate(agent, instances):
 
             del env
 
+            del episode_data
+
             gc.collect()
 
     return results
@@ -91,6 +95,10 @@ def validate(agent, validation_instances):
 
     gaps = []
 
+    densities = []
+
+    stabilities = []
+
     for r in results:
 
         utilizations.append(
@@ -103,11 +111,26 @@ def validate(agent, validation_instances):
 
         gaps.append(gap)
 
+        densities.append(
+            r["packing_density"]
+        )
+
+        stabilities.append(
+            r["stability"]
+        )
+
     return {
 
         "utilization": np.mean(utilizations),
 
+        "packing_density": np.mean(densities),
+
+        "stability": np.mean(stabilities),
+
         "optimality_gap": np.mean(gaps)
+
+        
+
 
     }
 
