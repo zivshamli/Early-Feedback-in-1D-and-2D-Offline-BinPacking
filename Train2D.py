@@ -230,7 +230,12 @@ def train(
 
                 "utilization": val["utilization"],
 
-                "optimality_gap": val["optimality_gap"]
+                "optimality_gap": val["optimality_gap"],
+
+                "packing_density": val["packing_density"],
+
+                "stability": val["stability"]
+
 
             })
 
@@ -247,6 +252,14 @@ def train(
             print(
                 "Validation Optimality Gap:",
                 val["optimality_gap"]
+            )
+            print(
+                "Validation Packing Density:",
+                val["packing_density"]
+            )
+            print(
+                "Validation Stability:",
+                val["stability"]
             )
 
         # =================================
@@ -308,7 +321,7 @@ print("Test:", len(test_instances))
 # Multiple Seeds
 # ==================================================
 
-seeds = [1]
+seeds = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 42]
 
 for seed in seeds:
 
@@ -350,9 +363,9 @@ for seed in seeds:
     agent = MonteCarloActorCritic2D(
         actor_state_dim=state_dim,
         critic_state_dim=state_dim,
-        alpha=100.0,
+        alpha=30.0,
         beta=10.0,
-        mu=5.0
+        mu=2.0
     )
 
     agent_type = "MC_2D"
@@ -367,7 +380,7 @@ for seed in seeds:
         agent,
         train_instances,
         validation_instances,
-        episodes=5000,
+        episodes=6000,
         validation_interval=200
     )
 
