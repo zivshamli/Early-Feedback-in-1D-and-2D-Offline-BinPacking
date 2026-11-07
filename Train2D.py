@@ -8,6 +8,7 @@ import gc
 from Packlib2DLoader import PackLib2DLoader
 from TwoDBinPackingEnv import Offline2DBinPackingEnv
 from MCAgent2D import MonteCarloActorCritic2D
+from TD2DAgent import TDActorCritic2D
 
 
 def set_seed(seed):
@@ -355,7 +356,7 @@ for seed in seeds:
     gc.collect()
 
 
-
+    '''
     # =================================
     # Initialize Monte Carlo Agent
     # =================================
@@ -371,6 +372,21 @@ for seed in seeds:
     agent_type = "MC_2D"
 
     print("Agent is MonteCarloActorCritic")
+    '''
+
+
+    #===============================
+    # Initialize TD Agent
+    #===============================
+    agent=TDActorCritic2D(
+        actor_state_dim=state_dim,
+        critic_state_dim=state_dim,
+        alpha=30.0,
+        beta=10.0,
+        mu=2.0
+    )
+    agent_type = "TD_2D"
+    print("Agent is TDActorCritic")
 
     # =================================
     # Training
